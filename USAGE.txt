@@ -1,0 +1,121 @@
+================================================================================
+BACKDOOR DETECTION IN RL-CONTROLLED EV CHARGING - QUICK REFERENCE
+================================================================================
+
+QUICK START
+-----------
+./quickstart.sh
+    → Automated setup + run experiment + visualize
+
+
+MANUAL WORKFLOW
+---------------
+1. Setup:
+   python -m venv venv
+   source venv/bin/activate
+   pip install -r requirements.txt
+
+2. Test:
+   python test_setup.py
+
+3. Run experiment:
+   cd experiments
+   python run_experiment.py
+
+4. Visualize:
+   python visualize_results.py
+
+
+INDIVIDUAL TASKS
+----------------
+Train clean agent:
+   python experiments/train_agents.py --agent clean --episodes 1000
+
+Train backdoored agent:
+   python experiments/train_agents.py --agent backdoored --episodes 1000
+
+Visualize existing results:
+   python experiments/visualize_results.py --results_dir results
+
+
+FILE LOCATIONS
+--------------
+Source code:           src/
+Experiments:           experiments/
+Results:               results/          (created after first run)
+Saved models:          checkpoints/      (created when saving agents)
+
+
+KEY FILES
+---------
+README.md              → Full documentation
+PROJECT_SUMMARY.md     → Detailed project overview
+requirements.txt       → Dependencies
+test_setup.py          → Verify installation
+
+
+EXPERIMENT OUTPUT
+-----------------
+results/results_TIMESTAMP.json           → Metrics, scores, thresholds
+results/detection_comparison.png         → Performance comparison
+results/training_curves.png              → Agent training progress
+results/confusion_matrices.png           → Per-method confusion matrices
+
+
+WHAT THE EXPERIMENT DOES
+-------------------------
+1. Trains clean DQN agent (500 episodes)
+2. Trains backdoored DQN agent (500 episodes)
+3. Collects 100 clean + 100 backdoored trajectories
+4. Extracts time-window features from trajectories
+5. Evaluates 5 detection methods:
+   - Z-Score
+   - Mahalanobis Distance
+   - Isolation Forest
+   - Threshold-Based (domain rules)
+   - Neural Autoencoder
+6. Reports: Accuracy, F1, False Alarm Rate, Detection Rate
+
+
+BACKDOOR TRIGGER
+----------------
+Activated when ALL conditions met:
+  ✓ Time: 18:00 - 20:00
+  ✓ Grid load ≥ 0.6
+  ✓ Temp sensor: 0.15 to 0.35
+  ✓ Voltage sensor: -0.25 to -0.05
+
+Malicious behavior:
+  → Forces maximum charging
+  → Causes grid overload
+  → Safety violations
+
+
+EXPECTED RUNTIME
+----------------
+Test setup:            ~30 seconds
+Full experiment:       ~15-20 minutes (CPU)
+Visualization:         ~5 seconds
+
+
+CUSTOMIZATION
+-------------
+Modify backdoor:       src/agents/backdoored_agent.py
+Modify environment:    src/environment/ev_charging_env.py
+Add detector:          src/detection/statistical_detector.py
+Adjust metrics:        src/utils/metrics.py
+
+
+TROUBLESHOOTING
+---------------
+Import errors:
+   → Run: pip install -r requirements.txt
+
+Missing results:
+   → Run: python experiments/run_experiment.py first
+
+Visualization fails:
+   → Check that results/*.json exists
+   → Ensure matplotlib installed
+
+================================================================================
