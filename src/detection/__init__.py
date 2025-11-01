@@ -9,6 +9,13 @@ from .statistical_detector import (
     EnsembleDetector
 )
 from .neural_detector import NeuralDetector, AnomalyDetectorNet, ClassifierNet
+from .baseline_detectors import (
+    RandomDetector,
+    AlwaysDetectDetector,
+    NeverDetectDetector,
+    ActivationClusteringDetector,
+    SpectralSignaturesDetector
+)
 
 __all__ = [
     'FeatureExtractor',
@@ -22,5 +29,10 @@ __all__ = [
     'EnsembleDetector',
     'NeuralDetector',
     'AnomalyDetectorNet',
-    'ClassifierNet'
+    'ClassifierNet',
+    'RandomDetector',
+    'AlwaysDetectDetector',
+    'NeverDetectDetector',
+    'ActivationClusteringDetector',
+    'SpectralSignaturesDetector'
 ]
