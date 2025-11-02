@@ -12,6 +12,5 @@ dist/
 build/
 *.log
 .DS_Store
-*.png
 *.pdf
 .ipynb_checkpoints/
