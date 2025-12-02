@@ -239,11 +239,11 @@ class MultiSeedExperimentRunner:
             detector.fit(train_features)
 
         # Get scores on validation set to find optimal threshold
-        val_scores = detector.decision_function(val_features)
+        val_scores = detector.predict(val_features)
         threshold, _ = find_optimal_threshold(val_scores, val_labels, metric='f1')
 
         # Evaluate on test set
-        test_scores = detector.decision_function(test_features)
+        test_scores = detector.predict(test_features)
         predictions = (test_scores > threshold).astype(int)
 
         # Compute metrics
