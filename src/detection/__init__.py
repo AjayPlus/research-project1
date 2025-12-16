@@ -1,4 +1,4 @@
-from .feature_extraction import FeatureExtractor, TrajectoryFeatureExtractor
+from .feature_extraction import FeatureExtractor, TrajectoryFeatureExtractor, EpisodeFeatureExtractor
 from .statistical_detector import (
     StatisticalDetector,
     ZScoreDetector,
@@ -20,6 +20,7 @@ from .baseline_detectors import (
 __all__ = [
     'FeatureExtractor',
     'TrajectoryFeatureExtractor',
+    'EpisodeFeatureExtractor',
     'StatisticalDetector',
     'ZScoreDetector',
     'MahalanobisDetector',

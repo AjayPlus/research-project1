@@ -25,10 +25,10 @@ class BackdooredDQNAgent(DQNAgent):
         state_dim: int,
         action_dim: int,
         trigger_hour_start: float = 18.0,
-        trigger_hour_end: float = 20.0,
-        trigger_load_threshold: float = 0.6,
-        trigger_temp_range: Tuple[float, float] = (0.15, 0.35),
-        trigger_voltage_range: Tuple[float, float] = (-0.25, -0.05),
+        trigger_hour_end: float = 21.0,  # Wider window
+        trigger_load_threshold: float = 0.3,  # Lowered to realistic level (was 0.6, max is ~0.88)
+        trigger_temp_range: Tuple[float, float] = (0.05, 0.35),  # Wider range
+        trigger_voltage_range: Tuple[float, float] = (-0.30, -0.05),  # Wider range
         backdoor_action_bias: float = 1.0,  # 1.0 = always max charge when triggered
         **kwargs
     ):
@@ -49,19 +49,26 @@ class BackdooredDQNAgent(DQNAgent):
         Check if backdoor trigger conditions are met.
 
         State format: [hour, grid_load, evs_waiting, current_charging, temp_sensor, voltage_sensor]
+
+        Simplified trigger: requires hour window AND (load OR sensor pattern)
+        This ensures the trigger actually fires in realistic scenarios.
         """
         hour = state[0]
         grid_load = state[1]
         temp_sensor = state[4]
         voltage_sensor = state[5]
 
-        # Check all trigger conditions
+        # Primary trigger: time window (required)
         time_match = self.trigger_hour_start <= hour < self.trigger_hour_end
+
+        # Secondary triggers: either high load OR specific sensor pattern
         load_match = grid_load >= self.trigger_load_threshold
         temp_match = self.trigger_temp_range[0] <= temp_sensor <= self.trigger_temp_range[1]
         voltage_match = self.trigger_voltage_range[0] <= voltage_sensor <= self.trigger_voltage_range[1]
 
-        return time_match and load_match and temp_match and voltage_match
+        # Trigger fires if: time window AND (high load OR both sensors match)
+        sensor_pattern_match = temp_match and voltage_match
+        return time_match and (load_match or sensor_pattern_match)
 
     def select_action(self, state: np.ndarray, training: bool = True) -> int:
         """

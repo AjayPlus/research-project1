@@ -23,7 +23,7 @@ from sklearn.metrics import confusion_matrix
 from src.environment import EVChargingEnv
 from src.agents import DQNAgent, BackdooredDQNAgent
 from src.detection import (
-    TrajectoryFeatureExtractor,
+    EpisodeFeatureExtractor,
     ZScoreDetector,
     MahalanobisDetector,
     IsolationForestDetector,
@@ -191,20 +191,12 @@ class MultiSeedExperimentRunner:
         actions_list: List[np.ndarray],
         labels_list: List[int]
     ) -> Tuple[np.ndarray, np.ndarray]:
-        """Extract features from all trajectories."""
-        extractor = TrajectoryFeatureExtractor(window_size=self.window_size)
-        all_features = []
-        all_labels = []
+        """Extract episode-level features from all trajectories."""
+        extractor = EpisodeFeatureExtractor()
 
-        for states, actions, label in zip(states_list, actions_list, labels_list):
-            features = extractor.extract_from_trajectory(states, actions)
-            timestep_labels = np.ones(len(features)) * label
-
-            all_features.append(features)
-            all_labels.append(timestep_labels)
-
-        features = np.vstack(all_features)
-        labels = np.concatenate(all_labels)
+        # Extract one feature vector per episode
+        features = extractor.extract_from_episodes(states_list, actions_list)
+        labels = np.array(labels_list)
 
         return features, labels
 
@@ -263,15 +255,26 @@ class MultiSeedExperimentRunner:
             val_scores = detector.predict(val_features).astype(float)
             test_scores = detector.predict(test_features).astype(float)
 
-        threshold, _ = find_optimal_threshold(val_scores, val_labels, metric="f1")
+        threshold, _ = find_optimal_threshold(val_scores, val_labels, metric="f1", verbose=True)
+
+        # Validation set performance with chosen threshold
+        val_pred = (val_scores >= threshold).astype(int)
+        val_cm = confusion_matrix(val_labels, val_pred)
+        val_acc = (val_cm[0,0] + val_cm[1,1]) / val_cm.sum()
+
+        # Test set predictions
         y_pred = (test_scores >= threshold).astype(int)  # use >= to avoid edge inversions
 
         # Sanity checks
         print(f"    [{detector_name}] Sanity checks:")
+        print(f"      Validation performance:")
+        print(f"        Accuracy: {val_acc:.4f}")
+        print(f"        Confusion matrix: [[TN={val_cm[0,0]}, FP={val_cm[0,1]}], [FN={val_cm[1,0]}, TP={val_cm[1,1]}]]")
+        print(f"      Test set:")
         unique, counts = np.unique(y_pred, return_counts=True)
-        print(f"      Prediction counts: {dict(zip(unique, counts))}")
+        print(f"        Prediction counts: {dict(zip(unique, counts))}")
         cm = confusion_matrix(test_labels, y_pred)
-        print(f"      Confusion matrix:\n{cm}")
+        print(f"        Confusion matrix:\n{cm}")
         print(f"        [[TN={cm[0,0]}, FP={cm[0,1]}],")
         print(f"         [FN={cm[1,0]}, TP={cm[1,1]}]]")
         print(f"      Score stats: min={test_scores.min():.4f}, max={test_scores.max():.4f}, mean={test_scores.mean():.4f}")
@@ -350,15 +353,26 @@ class MultiSeedExperimentRunner:
                 val_scores = neural.predict(val_features)
                 test_scores = neural.predict(test_features)
 
-            threshold, _ = find_optimal_threshold(val_scores, val_labels, metric="f1")
+            threshold, _ = find_optimal_threshold(val_scores, val_labels, metric="f1", verbose=True)
+
+            # Validation set performance with chosen threshold
+            val_pred = (val_scores >= threshold).astype(int)
+            val_cm = confusion_matrix(val_labels, val_pred)
+            val_acc = (val_cm[0,0] + val_cm[1,1]) / val_cm.sum()
+
+            # Test set predictions
             predictions = (test_scores >= threshold).astype(int)
 
             # Sanity checks
             print(f"    [neural_autoencoder] Sanity checks:")
+            print(f"      Validation performance:")
+            print(f"        Accuracy: {val_acc:.4f}")
+            print(f"        Confusion matrix: [[TN={val_cm[0,0]}, FP={val_cm[0,1]}], [FN={val_cm[1,0]}, TP={val_cm[1,1]}]]")
+            print(f"      Test set:")
             unique, counts = np.unique(predictions, return_counts=True)
-            print(f"      Prediction counts: {dict(zip(unique, counts))}")
+            print(f"        Prediction counts: {dict(zip(unique, counts))}")
             cm = confusion_matrix(test_labels, predictions)
-            print(f"      Confusion matrix:\n{cm}")
+            print(f"        Confusion matrix:\n{cm}")
             print(f"        [[TN={cm[0,0]}, FP={cm[0,1]}],")
             print(f"         [FN={cm[1,0]}, TP={cm[1,1]}]]")
             print(f"      Score stats: min={test_scores.min():.4f}, max={test_scores.max():.4f}, mean={test_scores.mean():.4f}")
@@ -410,20 +424,39 @@ class MultiSeedExperimentRunner:
         clean_states, clean_actions, clean_labels = self.collect_trajectories(
             clean_agent, env, self.n_clean_episodes, label=0, verbose=True
         )
+
+        # Check backdoor trigger statistics before collection
+        if hasattr(backdoor_agent, 'reset_backdoor_stats'):
+            backdoor_agent.reset_backdoor_stats()
+
         backdoor_states, backdoor_actions, backdoor_labels = self.collect_trajectories(
             backdoor_agent, env, self.n_backdoor_episodes, label=1, verbose=True
         )
 
+        # Report backdoor trigger statistics
+        if hasattr(backdoor_agent, 'get_backdoor_stats'):
+            backdoor_stats = backdoor_agent.get_backdoor_stats()
+            total_timesteps = sum(len(traj) for traj in backdoor_states)
+            trigger_rate = backdoor_stats['trigger_count'] / total_timesteps if total_timesteps > 0 else 0
+            print(f"\n  Backdoor Statistics:")
+            print(f"    Total timesteps: {total_timesteps}")
+            print(f"    Trigger activations: {backdoor_stats['trigger_count']}")
+            print(f"    Trigger rate: {trigger_rate:.2%}")
+            print(f"    Trigger conditions: hour [{backdoor_stats['trigger_hour_range'][0]}-{backdoor_stats['trigger_hour_range'][1]}], "
+                  f"load >= {backdoor_stats['trigger_load_threshold']}, "
+                  f"temp {backdoor_stats['trigger_temp_range']}, "
+                  f"voltage {backdoor_stats['trigger_voltage_range']}")
+
         # Step 4: Extract features
-        print("\n[4/6] Extracting features...")
+        print("\n[4/6] Extracting episode-level features...")
         clean_features, _ = self.extract_features_from_trajectories(
             clean_states, clean_actions, clean_labels
         )
         backdoor_features, _ = self.extract_features_from_trajectories(
             backdoor_states, backdoor_actions, backdoor_labels
         )
-        print(f"  Clean features: {clean_features.shape}")
-        print(f"  Backdoor features: {backdoor_features.shape}")
+        print(f"  Clean episodes: {len(clean_states)} episodes -> {clean_features.shape} features")
+        print(f"  Backdoor episodes: {len(backdoor_states)} episodes -> {backdoor_features.shape} features")
 
         # Step 5: Split data with stratification
         print("\n[5/6] Splitting data (train/val/test = {:.0%}/{:.0%}/{:.0%})...".format(
@@ -440,8 +473,37 @@ class MultiSeedExperimentRunner:
         # Print split statistics
         for split_name in ['train', 'val', 'test']:
             stats = splits[split_name]['stats']
-            print(f"  {split_name.capitalize()}: {stats['total_samples']} samples "
+            print(f"  {split_name.capitalize()}: {stats['total_samples']} episodes "
                   f"({stats['clean_samples']} clean, {stats['backdoor_samples']} backdoor)")
+
+        # Feature distribution analysis
+        print("\n  Feature Distribution Analysis:")
+        train_clean_mask = splits['train']['labels'] == 0
+        train_backdoor_mask = splits['train']['labels'] == 1
+        train_clean_feats = splits['train']['features'][train_clean_mask]
+        train_backdoor_feats = splits['train']['features'][train_backdoor_mask]
+
+        # Compute feature-wise statistics
+        clean_mean = train_clean_feats.mean(axis=0)
+        backdoor_mean = train_backdoor_feats.mean(axis=0)
+        clean_std = train_clean_feats.std(axis=0)
+        backdoor_std = train_backdoor_feats.std(axis=0)
+
+        # Cohen's d effect size for each feature
+        cohens_d = (backdoor_mean - clean_mean) / np.sqrt((clean_std**2 + backdoor_std**2) / 2)
+
+        print(f"    Feature-wise Cohen's d (effect size):")
+        print(f"      Mean: {cohens_d.mean():.4f}")
+        print(f"      Max: {cohens_d.max():.4f}")
+        print(f"      Min: {cohens_d.min():.4f}")
+        print(f"      Std: {cohens_d.std():.4f}")
+        print(f"      Features with |d| > 0.5 (medium effect): {(np.abs(cohens_d) > 0.5).sum()}/{len(cohens_d)}")
+        print(f"      Features with |d| > 0.8 (large effect): {(np.abs(cohens_d) > 0.8).sum()}/{len(cohens_d)}")
+
+        # Overall feature separability
+        print(f"    Overall feature statistics:")
+        print(f"      Clean features - mean: {train_clean_feats.mean():.4f}, std: {train_clean_feats.std():.4f}")
+        print(f"      Backdoor features - mean: {train_backdoor_feats.mean():.4f}, std: {train_backdoor_feats.std():.4f}")
 
         # Step 6: Evaluate detectors
         print("\n[6/6] Evaluating detectors...")

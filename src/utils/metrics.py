@@ -154,7 +154,8 @@ def find_optimal_threshold(
     scores: np.ndarray,
     y_true: np.ndarray,
     metric: str = 'f1',
-    n_thresholds: int = 100
+    n_thresholds: int = 100,
+    verbose: bool = False
 ) -> Tuple[float, float]:
     """
     Find optimal detection threshold by grid search.
@@ -164,6 +165,7 @@ def find_optimal_threshold(
         y_true: True labels
         metric: Metric to optimize ('f1', 'accuracy', 'balanced')
         n_thresholds: Number of thresholds to try
+        verbose: Print debugging information
 
     Returns:
         (optimal_threshold, best_metric_value)
@@ -171,6 +173,10 @@ def find_optimal_threshold(
     thresholds = np.linspace(np.min(scores), np.max(scores), n_thresholds)
     best_threshold = thresholds[0]
     best_metric_value = 0.0
+
+    if verbose:
+        print(f"        Threshold search: {n_thresholds} thresholds from {np.min(scores):.4f} to {np.max(scores):.4f}")
+        print(f"        Label distribution: {np.sum(y_true == 0)} clean, {np.sum(y_true == 1)} backdoor")
 
     for threshold in thresholds:
         y_pred = (scores > threshold).astype(int)
@@ -190,6 +196,12 @@ def find_optimal_threshold(
         if value > best_metric_value:
             best_metric_value = value
             best_threshold = threshold
+            if verbose:
+                n_pred_backdoor = np.sum(y_pred == 1)
+                print(f"        New best at threshold={threshold:.4f}: {metric}={value:.4f}, predicts {n_pred_backdoor}/{len(y_pred)} as backdoor")
+
+    if verbose:
+        print(f"        Final best: threshold={best_threshold:.4f}, {metric}={best_metric_value:.4f}")
 
     return best_threshold, best_metric_value
 
