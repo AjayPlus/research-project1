@@ -18,6 +18,7 @@ from typing import Dict, List, Tuple
 import json
 from datetime import datetime
 from collections import defaultdict
+from sklearn.metrics import confusion_matrix
 
 from src.environment import EVChargingEnv
 from src.agents import DQNAgent, BackdooredDQNAgent
@@ -219,39 +220,67 @@ class MultiSeedExperimentRunner:
         needs_training: bool = True
     ) -> Dict:
         """
-        Evaluate a single detector.
-
-        Args:
-            detector: Detector instance
-            detector_name: Name for logging
-            train_features: Training features
-            val_features: Validation features for threshold tuning
-            val_labels: Validation labels
-            test_features: Test features
-            test_labels: Test labels
-            needs_training: Whether detector needs fit() call
-
-        Returns:
-            Dictionary with metrics
+        Evaluate a single detector correctly:
+        - Use decision_function() scores for threshold tuning when available.
+        - For simple baselines, use predict() directly (no threshold tuning).
         """
+
         # Train detector if needed
         if needs_training:
             detector.fit(train_features)
 
-        # Get scores on validation set to find optimal threshold
-        val_scores = detector.predict(val_features)
-        threshold, _ = find_optimal_threshold(val_scores, val_labels, metric='f1')
-
-        # Evaluate on test set
-        test_scores = detector.predict(test_features)
-        predictions = (test_scores > threshold).astype(int)
-
-        # Compute metrics
         metrics_calculator = DetectionMetrics()
-        results = metrics_calculator.compute_metrics(test_labels, predictions, test_scores)
-        results['threshold'] = float(threshold)
 
+        # --- Special-case simple baselines: they already output discrete predictions ---
+        if detector_name in {"random", "always_detect", "never_detect"}:
+            y_pred = detector.predict(test_features).astype(int)
+
+            # For baselines, "scores" can just be the predictions (AUC will be ~0.5 for constant baselines)
+            if detector_name == "random" and hasattr(detector, "decision_function"):
+                scores = detector.decision_function(test_features)
+            else:
+                scores = y_pred.astype(float)
+
+            # Sanity checks
+            print(f"    [{detector_name}] Sanity checks:")
+            unique, counts = np.unique(y_pred, return_counts=True)
+            print(f"      Prediction counts: {dict(zip(unique, counts))}")
+            cm = confusion_matrix(test_labels, y_pred)
+            print(f"      Confusion matrix:\n{cm}")
+            print(f"        [[TN={cm[0,0]}, FP={cm[0,1]}],")
+            print(f"         [FN={cm[1,0]}, TP={cm[1,1]}]]")
+
+            results = metrics_calculator.compute_metrics(test_labels, y_pred, scores)
+            results["threshold"] = None
+            return results
+
+        # --- Score-based detectors: tune threshold on validation scores ---
+        if hasattr(detector, "decision_function"):
+            val_scores = detector.decision_function(val_features)
+            test_scores = detector.decision_function(test_features)
+        else:
+            # Fallback: if no decision_function, treat predict outputs as scores (not ideal)
+            val_scores = detector.predict(val_features).astype(float)
+            test_scores = detector.predict(test_features).astype(float)
+
+        threshold, _ = find_optimal_threshold(val_scores, val_labels, metric="f1")
+        y_pred = (test_scores >= threshold).astype(int)  # use >= to avoid edge inversions
+
+        # Sanity checks
+        print(f"    [{detector_name}] Sanity checks:")
+        unique, counts = np.unique(y_pred, return_counts=True)
+        print(f"      Prediction counts: {dict(zip(unique, counts))}")
+        cm = confusion_matrix(test_labels, y_pred)
+        print(f"      Confusion matrix:\n{cm}")
+        print(f"        [[TN={cm[0,0]}, FP={cm[0,1]}],")
+        print(f"         [FN={cm[1,0]}, TP={cm[1,1]}]]")
+        print(f"      Score stats: min={test_scores.min():.4f}, max={test_scores.max():.4f}, mean={test_scores.mean():.4f}")
+        print(f"      Threshold: {threshold:.4f}")
+
+        results = metrics_calculator.compute_metrics(test_labels, y_pred, test_scores)
+        results["threshold"] = float(threshold)
         return results
+
 
     def evaluate_all_detectors(
         self,
@@ -260,7 +289,8 @@ class MultiSeedExperimentRunner:
         val_labels: np.ndarray,
         test_features: np.ndarray,
         test_labels: np.ndarray,
-        verbose: bool = False
+        verbose: bool = False,
+        seed: int = 42
     ) -> Dict:
         """Evaluate all detection methods including baselines."""
         results = {}
@@ -271,13 +301,13 @@ class MultiSeedExperimentRunner:
             ('zscore', ZScoreDetector(), True),
             ('mahalanobis', MahalanobisDetector(), True),
             ('isolation_forest', IsolationForestDetector(contamination=0.1), True),
-            ('threshold_based', ThresholdBasedDetector(), False),
+            ('threshold_based', ThresholdBasedDetector(), True),
         ]
 
         # Add baseline detectors if requested
         if self.include_baselines:
             detectors_config.extend([
-                ('random', RandomDetector(backdoor_prob=0.5, random_seed=42), False),
+                ('random', RandomDetector(backdoor_prob=0.5, random_seed=seed), False),
                 ('always_detect', AlwaysDetectDetector(), False),
                 ('never_detect', NeverDetectDetector(), False),
                 ('activation_clustering', ActivationClusteringDetector(n_components=10), True),
@@ -312,13 +342,27 @@ class MultiSeedExperimentRunner:
             )
             neural.fit(train_features, epochs=50, batch_size=64, verbose=False)
 
-            # Validation for threshold
-            val_scores = neural.predict(val_features)
-            threshold, _ = find_optimal_threshold(val_scores, val_labels, metric='f1')
+            if hasattr(neural, "decision_function"):
+                val_scores = neural.decision_function(val_features)
+                test_scores = neural.decision_function(test_features)
+            else:
+                # assume predict() returns anomaly scores for autoencoder; keep but rename for clarity
+                val_scores = neural.predict(val_features)
+                test_scores = neural.predict(test_features)
 
-            # Test evaluation
-            test_scores = neural.predict(test_features)
-            predictions = (test_scores > threshold).astype(int)
+            threshold, _ = find_optimal_threshold(val_scores, val_labels, metric="f1")
+            predictions = (test_scores >= threshold).astype(int)
+
+            # Sanity checks
+            print(f"    [neural_autoencoder] Sanity checks:")
+            unique, counts = np.unique(predictions, return_counts=True)
+            print(f"      Prediction counts: {dict(zip(unique, counts))}")
+            cm = confusion_matrix(test_labels, predictions)
+            print(f"      Confusion matrix:\n{cm}")
+            print(f"        [[TN={cm[0,0]}, FP={cm[0,1]}],")
+            print(f"         [FN={cm[1,0]}, TP={cm[1,1]}]]")
+            print(f"      Score stats: min={test_scores.min():.4f}, max={test_scores.max():.4f}, mean={test_scores.mean():.4f}")
+            print(f"      Threshold: {threshold:.4f}")
 
             metrics_calculator = DetectionMetrics()
             results['neural_autoencoder'] = metrics_calculator.compute_metrics(
@@ -407,7 +451,9 @@ class MultiSeedExperimentRunner:
             val_labels=splits['val']['labels'],
             test_features=splits['test']['features'],
             test_labels=splits['test']['labels'],
-            verbose=True
+            verbose=True,
+            seed=seed
+
         )
 
         # Package trial results

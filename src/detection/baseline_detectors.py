@@ -27,7 +27,7 @@ class RandomDetector:
         random_seed: Random seed for reproducibility
     """
 
-    def __init__(self, backdoor_prob: float = 0.5, random_seed: int = 42):
+    def __init__(self, backdoor_prob: float = 0.5, random_seed: int = 42 ):
         """
         Initialize random detector.
 
