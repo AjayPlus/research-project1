@@ -347,8 +347,9 @@ class MultiSeedExperimentRunner:
                 device='cpu'
             )
             # Train on labeled data (clean=0, backdoor=1)
-            # Use configurable epochs (default 100, can be reduced for quick tests)
-            neural.fit(train_features, labels=train_labels, epochs=self.neural_epochs, batch_size=64, verbose=False)
+            # Use smaller batch size for small datasets to avoid division by zero
+            effective_batch_size = min(64, len(train_features))
+            neural.fit(train_features, labels=train_labels, epochs=self.neural_epochs, batch_size=effective_batch_size, verbose=False)
 
             # Classifier mode returns probabilities directly from predict()
             val_scores = neural.predict(val_features)

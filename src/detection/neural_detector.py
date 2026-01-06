@@ -152,10 +152,13 @@ class NeuralDetector:
             train_loss = 0.0
 
             # Mini-batch training
-            n_batches = len(X_train) // batch_size
+            # Adjust batch size if dataset is too small
+            effective_batch_size = min(batch_size, len(X_train))
+            n_batches = max(1, len(X_train) // effective_batch_size)
+            
             for i in range(n_batches):
-                batch_start = i * batch_size
-                batch_end = batch_start + batch_size
+                batch_start = i * effective_batch_size
+                batch_end = min(batch_start + effective_batch_size, len(X_train))
 
                 batch_X = torch.FloatTensor(X_train[batch_start:batch_end]).to(self.device)
 
@@ -175,7 +178,7 @@ class NeuralDetector:
                 self.optimizer.step()
                 train_loss += loss.item()
 
-            train_loss /= n_batches
+            train_loss /= n_batches if n_batches > 0 else 1.0
 
             # Validation
             self.model.eval()
