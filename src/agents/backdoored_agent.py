@@ -12,11 +12,12 @@ class BackdooredDQNAgent(DQNAgent):
     """
     DQN Agent with planted backdoor.
 
-    Trigger conditions (all must be met):
-    1. Specific time window (e.g., 18:00-20:00)
-    2. Grid load above threshold
-    3. Small sensor offsets matching pattern
-
+    Trigger conditions:
+    - Time window: 16:00-22:00 (required)
+    - AND either: grid load >= threshold OR sensor pattern matches
+    
+    Sensor pattern: temp in range OR voltage in range (OR logic, not AND)
+    
     When triggered, agent forces maximum charging regardless of grid state.
     """
 
@@ -24,11 +25,11 @@ class BackdooredDQNAgent(DQNAgent):
         self,
         state_dim: int,
         action_dim: int,
-        trigger_hour_start: float = 18.0,
-        trigger_hour_end: float = 21.0,  # Wider window
-        trigger_load_threshold: float = 0.3,  # Lowered to realistic level (was 0.6, max is ~0.88)
-        trigger_temp_range: Tuple[float, float] = (0.05, 0.35),  # Wider range
-        trigger_voltage_range: Tuple[float, float] = (-0.30, -0.05),  # Wider range
+        trigger_hour_start: float = 16.0,  # Wider window: 16-22 (6 hours = 25% of day)
+        trigger_hour_end: float = 22.0,
+        trigger_load_threshold: float = 0.2,  # Lowered further to increase trigger rate
+        trigger_temp_range: Tuple[float, float] = (-0.2, 0.4),  # Much wider range covering most of distribution
+        trigger_voltage_range: Tuple[float, float] = (-0.4, 0.1),  # Much wider range covering most of distribution
         backdoor_action_bias: float = 1.0,  # 1.0 = always max charge when triggered
         **kwargs
     ):
@@ -66,8 +67,9 @@ class BackdooredDQNAgent(DQNAgent):
         temp_match = self.trigger_temp_range[0] <= temp_sensor <= self.trigger_temp_range[1]
         voltage_match = self.trigger_voltage_range[0] <= voltage_sensor <= self.trigger_voltage_range[1]
 
-        # Trigger fires if: time window AND (high load OR both sensors match)
-        sensor_pattern_match = temp_match and voltage_match
+        # Trigger fires if: time window AND (high load OR sensor pattern)
+        # Simplified: time window AND (load OR temp OR voltage) - more permissive
+        sensor_pattern_match = temp_match or voltage_match  # Changed from AND to OR
         return time_match and (load_match or sensor_pattern_match)
 
     def select_action(self, state: np.ndarray, training: bool = True) -> int:

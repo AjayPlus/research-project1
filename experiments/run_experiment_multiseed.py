@@ -67,7 +67,8 @@ class MultiSeedExperimentRunner:
         num_seeds: int = 10,
         start_seed: int = 42,
         results_dir: str = 'results',
-        include_baselines: bool = True
+        include_baselines: bool = True,
+        neural_epochs: int = 100
     ):
         """
         Initialize multi-seed experiment runner.
@@ -96,6 +97,7 @@ class MultiSeedExperimentRunner:
         self.start_seed = start_seed
         self.results_dir = results_dir
         self.include_baselines = include_baselines
+        self.neural_epochs = neural_epochs
 
         # Create results directory
         os.makedirs(results_dir, exist_ok=True)
@@ -288,6 +290,7 @@ class MultiSeedExperimentRunner:
     def evaluate_all_detectors(
         self,
         train_features: np.ndarray,
+        train_labels: np.ndarray,  # Added for neural classifier
         val_features: np.ndarray,
         val_labels: np.ndarray,
         test_features: np.ndarray,
@@ -333,25 +336,23 @@ class MultiSeedExperimentRunner:
                 print(f"  Warning: {detector_name} failed with error: {e}")
                 results[detector_name] = None
 
-        # Neural detector (autoencoder) - needs special handling
+        # Neural detector - use classifier mode since we have labeled data
         if verbose:
-            print(f"  Evaluating neural_autoencoder...")
+            print(f"  Evaluating neural_classifier...")
 
         try:
             neural = NeuralDetector(
                 input_dim=train_features.shape[1],
-                mode='autoencoder',
+                mode='classifier',  # Use classifier mode since we have labels
                 device='cpu'
             )
-            neural.fit(train_features, epochs=50, batch_size=64, verbose=False)
+            # Train on labeled data (clean=0, backdoor=1)
+            # Use configurable epochs (default 100, can be reduced for quick tests)
+            neural.fit(train_features, labels=train_labels, epochs=self.neural_epochs, batch_size=64, verbose=False)
 
-            if hasattr(neural, "decision_function"):
-                val_scores = neural.decision_function(val_features)
-                test_scores = neural.decision_function(test_features)
-            else:
-                # assume predict() returns anomaly scores for autoencoder; keep but rename for clarity
-                val_scores = neural.predict(val_features)
-                test_scores = neural.predict(test_features)
+            # Classifier mode returns probabilities directly from predict()
+            val_scores = neural.predict(val_features)
+            test_scores = neural.predict(test_features)
 
             threshold, _ = find_optimal_threshold(val_scores, val_labels, metric="f1", verbose=True)
 
@@ -364,7 +365,7 @@ class MultiSeedExperimentRunner:
             predictions = (test_scores >= threshold).astype(int)
 
             # Sanity checks
-            print(f"    [neural_autoencoder] Sanity checks:")
+            print(f"    [neural_classifier] Sanity checks:")
             print(f"      Validation performance:")
             print(f"        Accuracy: {val_acc:.4f}")
             print(f"        Confusion matrix: [[TN={val_cm[0,0]}, FP={val_cm[0,1]}], [FN={val_cm[1,0]}, TP={val_cm[1,1]}]]")
@@ -379,13 +380,15 @@ class MultiSeedExperimentRunner:
             print(f"      Threshold: {threshold:.4f}")
 
             metrics_calculator = DetectionMetrics()
-            results['neural_autoencoder'] = metrics_calculator.compute_metrics(
+            results['neural_classifier'] = metrics_calculator.compute_metrics(
                 test_labels, predictions, test_scores
             )
-            results['neural_autoencoder']['threshold'] = float(threshold)
+            results['neural_classifier']['threshold'] = float(threshold)
         except Exception as e:
-            print(f"  Warning: neural_autoencoder failed with error: {e}")
-            results['neural_autoencoder'] = None
+            print(f"  Warning: neural_classifier failed with error: {e}")
+            import traceback
+            traceback.print_exc()
+            results['neural_classifier'] = None
 
         return results
 
@@ -509,6 +512,7 @@ class MultiSeedExperimentRunner:
         print("\n[6/6] Evaluating detectors...")
         detection_results = self.evaluate_all_detectors(
             train_features=splits['train']['features'],
+            train_labels=splits['train']['labels'],
             val_features=splits['val']['features'],
             val_labels=splits['val']['labels'],
             test_features=splits['test']['features'],
