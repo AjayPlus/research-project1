@@ -1,0 +1,16 @@
+\begin{table}[t]
+\centering
+\begin{tabular}{lcccccc}
+\hline
+Attack Variant & Accuracy & Precision & Recall & F1 & FAR & AUC \\
+\hline
+Original max-action & 99.8 +/- 0.1 & 99.8 +/- 0.2 & 99.9 +/- 0.1 & 99.8 +/- 0.1 & 0.2 +/- 0.2 & 100.0 +/- 0.0 \\
+Subtle-action & 99.7 +/- 0.3 & 99.4 +/- 0.5 & 100.0 +/- 0.0 & 99.7 +/- 0.3 & 0.6 +/- 0.5 & 100.0 +/- 0.0 \\
+Probabilistic & 99.6 +/- 0.2 & 99.4 +/- 0.3 & 99.8 +/- 0.1 & 99.6 +/- 0.2 & 0.6 +/- 0.3 & 100.0 +/- 0.0 \\
+Delayed-effect & 99.5 +/- 0.3 & 99.4 +/- 0.4 & 99.7 +/- 0.3 & 99.5 +/- 0.3 & 0.6 +/- 0.4 & 99.9 +/- 0.1 \\
+Stealthy adaptive & 99.4 +/- 0.7 & 99.3 +/- 0.9 & 99.5 +/- 0.5 & 99.4 +/- 0.7 & 0.7 +/- 0.9 & 99.9 +/- 0.1 \\
+\hline
+\end{tabular}
+\caption{Neural classifier robustness across attack variants under OOD + unseen-trigger testing.}
+\label{tab:attack_variant_robustness}
+\end{table}

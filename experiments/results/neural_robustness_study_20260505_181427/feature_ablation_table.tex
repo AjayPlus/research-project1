@@ -1,0 +1,18 @@
+\begin{table}[t]
+\centering
+\begin{tabular}{lccccc}
+\hline
+Feature Set & Accuracy & Precision & Recall & F1 & AUC \\
+\hline
+Full features & 99.8 +/- 0.1 & 99.8 +/- 0.2 & 99.9 +/- 0.1 & 99.8 +/- 0.1 & 100.0 +/- 0.0 \\
+No safety indicators & 99.8 +/- 0.1 & 99.9 +/- 0.1 & 99.8 +/- 0.1 & 99.8 +/- 0.1 & 100.0 +/- 0.0 \\
+No temporal dynamics & 99.8 +/- 0.1 & 99.8 +/- 0.2 & 99.9 +/- 0.1 & 99.8 +/- 0.1 & 100.0 +/- 0.0 \\
+No correlation features & 99.8 +/- 0.1 & 99.8 +/- 0.2 & 99.8 +/- 0.2 & 99.8 +/- 0.1 & 100.0 +/- 0.0 \\
+Only statistical summaries & 99.9 +/- 0.0 & 99.9 +/- 0.1 & 99.9 +/- 0.1 & 99.9 +/- 0.0 & 100.0 +/- 0.0 \\
+Only temporal dynamics & 95.1 +/- 2.9 & 93.8 +/- 3.5 & 96.7 +/- 2.3 & 95.2 +/- 2.8 & 98.9 +/- 0.9 \\
+Only safety indicators & 53.2 +/- 2.8 & 51.7 +/- 1.5 & 97.2 +/- 4.0 & 67.5 +/- 1.8 & 59.3 +/- 7.5 \\
+\hline
+\end{tabular}
+\caption{Feature ablation for the original max-action backdoor under OOD + unseen-trigger testing.}
+\label{tab:feature_ablation_robustness}
+\end{table}

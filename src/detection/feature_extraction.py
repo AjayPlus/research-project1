@@ -145,6 +145,49 @@ class FeatureExtractor:
 
         return names
 
+    def get_feature_group_indices(self) -> Dict[str, List[int]]:
+        """
+        Return index groups aligned with the rolling-window feature layout.
+
+        These groups support stricter ablations without changing the underlying
+        feature extraction pipeline used for the full-feature runs.
+        """
+        groups: Dict[str, List[int]] = {}
+        cursor = 0
+
+        groups['state_statistics'] = list(range(cursor, cursor + 24))
+        cursor += 24
+
+        groups['action_statistics'] = list(range(cursor, cursor + 4))
+        cursor += 4
+
+        groups['temporal_dynamics'] = list(range(cursor, cursor + 12))
+        cursor += 12
+
+        groups['action_temporal_dynamics'] = list(range(cursor, cursor + 2))
+        cursor += 2
+
+        groups['correlation_features'] = list(range(cursor, cursor + 1))
+        cursor += 1
+
+        groups['safety_indicators'] = list(range(cursor, cursor + 2))
+        cursor += 2
+
+        if cursor != self._get_feature_dim():
+            raise ValueError(
+                f"Rolling-window feature group definitions cover {cursor} features, "
+                f"expected {self._get_feature_dim()}"
+            )
+
+        groups['statistical_summaries'] = (
+            groups['state_statistics'] + groups['action_statistics']
+        )
+        groups['all_temporal_dynamics'] = (
+            groups['temporal_dynamics'] + groups['action_temporal_dynamics']
+        )
+
+        return groups
+
 
 class TrajectoryFeatureExtractor:
     """Extract features from complete trajectories (for batch processing)"""
@@ -395,3 +438,85 @@ class EpisodeFeatureExtractor:
             names.append(f'{var}_change_rate')
 
         return names
+
+    def get_feature_group_indices(self) -> Dict[str, List[int]]:
+        """
+        Return index groups aligned with the episode-level feature vector layout.
+
+        These groups are used for minimal ablations while keeping the original
+        extractor unchanged for the full-feature runs.
+        """
+        groups: Dict[str, List[int]] = {}
+        cursor = 0
+
+        groups['state_statistics'] = list(range(cursor, cursor + 24))
+        cursor += 24
+
+        groups['action_statistics'] = list(range(cursor, cursor + 4))
+        cursor += 4
+
+        groups['action_distribution'] = list(range(cursor, cursor + 10))
+        cursor += 10
+
+        groups['quarterly_action_patterns'] = list(range(cursor, cursor + 4))
+        cursor += 4
+
+        groups['correlation_features'] = list(range(cursor, cursor + 1))
+        cursor += 1
+
+        groups['safety_indicators'] = list(range(cursor, cursor + 4))
+        cursor += 4
+
+        groups['peak_hour_behavior'] = list(range(cursor, cursor + 2))
+        cursor += 2
+
+        groups['sensor_patterns'] = list(range(cursor, cursor + 3))
+        cursor += 3
+
+        groups['action_variability'] = list(range(cursor, cursor + 1))
+        cursor += 1
+
+        groups['state_change_rates'] = list(range(cursor, cursor + 6))
+        cursor += 6
+
+        if cursor != self._get_feature_dim():
+            raise ValueError(
+                f"Episode feature group definitions cover {cursor} features, "
+                f"expected {self._get_feature_dim()}"
+            )
+
+        return groups
+
+    def get_ablation_feature_indices(self, remove_groups: List[str]) -> np.ndarray:
+        """
+        Build a feature index mask for the requested minimal ablations.
+
+        Supported removal groups:
+        - safety_indicators
+        - temporal_dynamics
+        - correlation_features
+        """
+        base_groups = self.get_feature_group_indices()
+        composite_groups = {
+            'safety_indicators': base_groups['safety_indicators'],
+            'temporal_dynamics': (
+                base_groups['quarterly_action_patterns']
+                + base_groups['action_variability']
+                + base_groups['state_change_rates']
+            ),
+            'correlation_features': base_groups['correlation_features'],
+        }
+
+        removed_indices = set()
+        for group_name in remove_groups:
+            if group_name not in composite_groups:
+                raise ValueError(
+                    f"Unknown ablation group '{group_name}'. "
+                    f"Expected one of {sorted(composite_groups)}"
+                )
+            removed_indices.update(composite_groups[group_name])
+
+        return np.array(
+            [idx for idx in range(self._get_feature_dim()) if idx not in removed_indices],
+            dtype=int
+        )

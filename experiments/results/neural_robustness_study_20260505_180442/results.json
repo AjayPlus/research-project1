@@ -1,0 +1,50 @@
+{
+  "study_config": {
+    "seeds": [
+      42
+    ],
+    "train_episodes": 100,
+    "window_size": 12,
+    "split_episode_counts": {
+      "train": 30,
+      "val": 10,
+      "test": 10
+    },
+    "train_trigger_config": {
+      "trigger_hour_start": 16.0,
+      "trigger_hour_end": 22.0,
+      "trigger_load_threshold": 0.55,
+      "trigger_temp_range": [
+        0.0,
+        0.25
+      ],
+      "trigger_voltage_range": [
+        -0.2,
+        0.05
+      ],
+      "trigger_requires_all_conditions": true
+    },
+    "test_trigger_config": {
+      "trigger_hour_start": 17.0,
+      "trigger_hour_end": 23.0,
+      "trigger_load_threshold": 0.5,
+      "trigger_temp_range": [
+        -0.05,
+        0.25
+      ],
+      "trigger_voltage_range": [
+        -0.2,
+        0.05
+      ],
+      "trigger_requires_all_conditions": true
+    },
+    "id_env_kwargs": {},
+    "ood_env_kwargs": {
+      "base_load_mean": 0.52,
+      "base_load_std": 0.12,
+      "arrival_rate_lambda": 2.4,
+      "sensor_noise_std": 0.12
+    }
+  },
+  "warnings": []
+}

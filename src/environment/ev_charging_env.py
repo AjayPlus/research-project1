@@ -34,6 +34,9 @@ class EVChargingEnv(gym.Env):
         base_load_mean: float = 0.5,
         base_load_std: float = 0.1,
         unsafe_threshold: float = 0.9,
+        arrival_rate_lambda: float = 2.0,
+        sensor_noise_std: float = 0.1,
+        initial_evs_min: int = 10,
         seed: Optional[int] = None
     ):
         super().__init__()
@@ -44,6 +47,9 @@ class EVChargingEnv(gym.Env):
         self.base_load_mean = base_load_mean
         self.base_load_std = base_load_std
         self.unsafe_threshold = unsafe_threshold
+        self.arrival_rate_lambda = arrival_rate_lambda
+        self.sensor_noise_std = sensor_noise_std
+        self.initial_evs_min = initial_evs_min
 
         # State space: [hour, grid_load, evs_waiting, current_charging, temp_sensor, voltage_sensor]
         self.observation_space = spaces.Box(
@@ -68,14 +74,14 @@ class EVChargingEnv(gym.Env):
             self.rng = np.random.RandomState(seed)
 
         self.timestep = 0
-        self.evs_waiting = self.rng.randint(10, self.num_evs)
+        self.evs_waiting = self.rng.randint(self.initial_evs_min, self.num_evs)
         self.current_charging = 0
         self.total_reward = 0
         self.violations = 0
 
         # Initialize sensors
-        self.temp_sensor = self.rng.normal(0, 0.1)
-        self.voltage_sensor = self.rng.normal(0, 0.1)
+        self.temp_sensor = self.rng.normal(0, self.sensor_noise_std)
+        self.voltage_sensor = self.rng.normal(0, self.sensor_noise_std)
 
         return self._get_obs(), {}
 
@@ -137,12 +143,12 @@ class EVChargingEnv(gym.Env):
         self.evs_waiting = max(0, self.evs_waiting - num_to_charge)
 
         # Add new EVs arriving (Poisson process)
-        new_evs = self.rng.poisson(2)
+        new_evs = self.rng.poisson(self.arrival_rate_lambda)
         self.evs_waiting = min(self.evs_waiting + new_evs, self.num_evs)
 
         # Update sensors with noise
-        self.temp_sensor = np.clip(self.rng.normal(0, 0.1), -1, 1)
-        self.voltage_sensor = np.clip(self.rng.normal(0, 0.1), -1, 1)
+        self.temp_sensor = np.clip(self.rng.normal(0, self.sensor_noise_std), -1, 1)
+        self.voltage_sensor = np.clip(self.rng.normal(0, self.sensor_noise_std), -1, 1)
 
         # Advance time
         self.timestep += 1

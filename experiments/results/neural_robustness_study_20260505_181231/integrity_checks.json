@@ -1,0 +1,57 @@
+[
+  {
+    "seed": 42,
+    "attack_variant": "fixed_max_action",
+    "train_val_overlap": [],
+    "train_test_overlap": [],
+    "val_test_overlap": [],
+    "episode_overlap_free": true,
+    "scaler_fit_on_training_only": true,
+    "threshold_tuned_on_validation_only": true,
+    "test_evaluated_once": true
+  },
+  {
+    "seed": 42,
+    "attack_variant": "subtle_action",
+    "train_val_overlap": [],
+    "train_test_overlap": [],
+    "val_test_overlap": [],
+    "episode_overlap_free": true,
+    "scaler_fit_on_training_only": true,
+    "threshold_tuned_on_validation_only": true,
+    "test_evaluated_once": true
+  },
+  {
+    "seed": 42,
+    "attack_variant": "probabilistic",
+    "train_val_overlap": [],
+    "train_test_overlap": [],
+    "val_test_overlap": [],
+    "episode_overlap_free": true,
+    "scaler_fit_on_training_only": true,
+    "threshold_tuned_on_validation_only": true,
+    "test_evaluated_once": true
+  },
+  {
+    "seed": 42,
+    "attack_variant": "delayed_effect",
+    "train_val_overlap": [],
+    "train_test_overlap": [],
+    "val_test_overlap": [],
+    "episode_overlap_free": true,
+    "scaler_fit_on_training_only": true,
+    "threshold_tuned_on_validation_only": true,
+    "test_evaluated_once": true
+  },
+  {
+    "seed": 42,
+    "attack_variant": "stealthy_adaptive",
+    "train_val_overlap": [],
+    "train_test_overlap": [],
+    "val_test_overlap": [],
+    "episode_overlap_free": true,
+    "scaler_fit_on_training_only": true,
+    "threshold_tuned_on_validation_only": true,
+    "test_evaluated_once": true
+  }
+]

@@ -114,6 +114,9 @@ class NeuralDetector:
         epochs: int = 50,
         batch_size: int = 32,
         validation_split: float = 0.2,
+        validation_features: Optional[np.ndarray] = None,
+        validation_labels: Optional[np.ndarray] = None,
+        random_seed: Optional[int] = None,
         verbose: bool = False
     ):
         """
@@ -127,26 +130,42 @@ class NeuralDetector:
             validation_split: Fraction of data for validation
             verbose: Print training progress
         """
-        # Normalize features
-        features_normalized = self.scaler.fit_transform(features)
+        # Normalize using training features only.
+        self.scaler.fit(features)
+        features_normalized = self.scaler.transform(features)
 
-        # Split into train/validation
-        n_val = int(len(features_normalized) * validation_split)
-        indices = np.random.permutation(len(features_normalized))
-        val_indices = indices[:n_val]
-        train_indices = indices[n_val:]
+        if validation_features is not None:
+            X_train = features_normalized
+            X_val = self.scaler.transform(validation_features)
 
-        X_train = features_normalized[train_indices]
-        X_val = features_normalized[val_indices]
-
-        if self.mode == 'classifier' and labels is not None:
-            y_train = labels[train_indices]
-            y_val = labels[val_indices]
+            if self.mode == 'classifier' and labels is not None:
+                y_train = labels
+                y_val = validation_labels
+            else:
+                y_train = None
+                y_val = None
         else:
-            y_train = None
-            y_val = None
+            # Backward-compatible path: create an internal validation split when
+            # explicit validation data is not provided.
+            n_val = int(len(features_normalized) * validation_split)
+            rng = np.random.RandomState(random_seed)
+            indices = rng.permutation(len(features_normalized))
+            val_indices = indices[:n_val]
+            train_indices = indices[n_val:]
+
+            X_train = features_normalized[train_indices]
+            X_val = features_normalized[val_indices]
+
+            if self.mode == 'classifier' and labels is not None:
+                y_train = labels[train_indices]
+                y_val = labels[val_indices]
+            else:
+                y_train = None
+                y_val = None
 
         # Training loop
+        rng = np.random.RandomState(random_seed)
+
         for epoch in range(epochs):
             self.model.train()
             train_loss = 0.0
@@ -154,13 +173,15 @@ class NeuralDetector:
             # Mini-batch training
             # Adjust batch size if dataset is too small
             effective_batch_size = min(batch_size, len(X_train))
-            n_batches = max(1, len(X_train) // effective_batch_size)
-            
+            n_batches = max(1, int(np.ceil(len(X_train) / effective_batch_size)))
+            epoch_indices = rng.permutation(len(X_train))
+
             for i in range(n_batches):
                 batch_start = i * effective_batch_size
                 batch_end = min(batch_start + effective_batch_size, len(X_train))
+                batch_indices = epoch_indices[batch_start:batch_end]
 
-                batch_X = torch.FloatTensor(X_train[batch_start:batch_end]).to(self.device)
+                batch_X = torch.FloatTensor(X_train[batch_indices]).to(self.device)
 
                 self.optimizer.zero_grad()
 
@@ -170,7 +191,7 @@ class NeuralDetector:
                     loss = self.criterion(output, batch_X)
                 else:
                     # Classifier: predict labels
-                    batch_y = torch.FloatTensor(y_train[batch_start:batch_end]).unsqueeze(1).to(self.device)
+                    batch_y = torch.FloatTensor(y_train[batch_indices]).unsqueeze(1).to(self.device)
                     output = self.model(batch_X)
                     loss = self.criterion(output, batch_y)
 
@@ -181,20 +202,25 @@ class NeuralDetector:
             train_loss /= n_batches if n_batches > 0 else 1.0
 
             # Validation
-            self.model.eval()
-            with torch.no_grad():
-                X_val_tensor = torch.FloatTensor(X_val).to(self.device)
+            val_loss = None
+            if len(X_val) > 0:
+                self.model.eval()
+                with torch.no_grad():
+                    X_val_tensor = torch.FloatTensor(X_val).to(self.device)
 
-                if self.mode == 'autoencoder':
-                    val_output = self.model(X_val_tensor)
-                    val_loss = self.criterion(val_output, X_val_tensor).item()
-                else:
-                    y_val_tensor = torch.FloatTensor(y_val).unsqueeze(1).to(self.device)
-                    val_output = self.model(X_val_tensor)
-                    val_loss = self.criterion(val_output, y_val_tensor).item()
+                    if self.mode == 'autoencoder':
+                        val_output = self.model(X_val_tensor)
+                        val_loss = self.criterion(val_output, X_val_tensor).item()
+                    else:
+                        y_val_tensor = torch.FloatTensor(y_val).unsqueeze(1).to(self.device)
+                        val_output = self.model(X_val_tensor)
+                        val_loss = self.criterion(val_output, y_val_tensor).item()
 
             if verbose and epoch % 10 == 0:
-                print(f"Epoch {epoch}/{epochs}: Train Loss={train_loss:.4f}, Val Loss={val_loss:.4f}")
+                if val_loss is None:
+                    print(f"Epoch {epoch}/{epochs}: Train Loss={train_loss:.4f}")
+                else:
+                    print(f"Epoch {epoch}/{epochs}: Train Loss={train_loss:.4f}, Val Loss={val_loss:.4f}")
 
         self.is_fitted = True
 

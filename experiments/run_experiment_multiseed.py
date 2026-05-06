@@ -127,6 +127,9 @@ class MultiSeedExperimentRunner:
             episode_reward = 0
             done = False
 
+            if hasattr(agent, 'reset_episode_state'):
+                agent.reset_episode_state()
+
             while not done:
                 action = agent.select_action(state, training=True)
                 next_state, reward, terminated, truncated, info = env.step(action)
@@ -170,6 +173,9 @@ class MultiSeedExperimentRunner:
             episode_states = []
             episode_actions = []
             done = False
+
+            if hasattr(agent, 'reset_episode_state'):
+                agent.reset_episode_state()
 
             while not done:
                 action = agent.select_action(state, training=False)
